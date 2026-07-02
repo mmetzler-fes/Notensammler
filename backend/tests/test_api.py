@@ -1,12 +1,18 @@
-"""End-to-End-Test der API gegen eine Kopie der ODS-Vorlage.
+"""End-to-End-Test der API gegen das committete Sample.
 
 Aufruf (aus dem Ordner ``backend``):
 
     pip install pytest httpx
     python -m pytest
 
-Die Testdatei wird automatisch aus ../data/Gesamtnotenliste.ods kopiert; die
-Original-Datei wird nicht verändert.
+Getestet wird gegen ``../Gesamtnotenliste.ods`` (das versionierte, anonymisierte
+Sample – NICHT die veränderliche Datei unter data/). Es wird nur eine Kopie
+bearbeitet; das Original bleibt unverändert.
+
+Struktur des Samples:
+  Blatt "E1ME1": Klassenlehrer (C3) = "xxx"; Spalte L gehört "xxx",
+                 die übrigen Spalten gehören "x".
+  Blatt "Login_Daten": x / xtest, xxx / xxxtest
 """
 import os
 import shutil
@@ -15,7 +21,12 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-TEMPLATE = ROOT / "data" / "Gesamtnotenliste.ods"
+TEMPLATE = ROOT / "Gesamtnotenliste.ods"
+
+CLASS = "E1ME1"
+CT, CT_PW = "xxx", "xxxtest"   # Klassenlehrer
+TEACHER, TEACHER_PW = "x", "xtest"  # Fachlehrer
+CT_ONLY_COL = "L"              # Spalte, die nur dem Klassenlehrer gehört
 
 
 @pytest.fixture()
@@ -43,43 +54,55 @@ def _auth(client, kuerzel, passwort):
 
 def test_login_falsch(client):
     assert client.post(
-        "/api/login", json={"kuerzel": "MEM", "passwort": "x"}
+        "/api/login", json={"kuerzel": CT, "passwort": "falsch"}
     ).status_code == 401
 
 
 def test_klassenlehrer_darf_alles_schreiben(client):
-    h = _auth(client, "MEM", "test123")
+    h = _auth(client, CT, CT_PW)
     classes = client.get("/api/classes", headers=h).json()["classes"]
-    assert any(c["class"] == "E2EG2" and c["is_classteacher"] for c in classes)
+    assert any(c["class"] == CLASS and c["is_classteacher"] for c in classes)
 
     r = client.post(
-        "/api/classes/E2EG2/grades",
+        f"/api/classes/{CLASS}/grades",
         headers=h,
-        json={"entries": [{"row": 9, "col": "L", "value": "2"},
-                          {"row": 10, "col": "L", "value": "3,5"}]},
+        json={"entries": [{"row": 9, "col": CT_ONLY_COL, "value": "2"},
+                          {"row": 10, "col": CT_ONLY_COL, "value": "3,5"}]},
     )
     assert r.status_code == 200 and r.json()["written"] == 2
 
-    grades = client.get("/api/classes/E2EG2/students", headers=h).json()["grades"]
-    assert grades["9"]["L"] == "2"
-    assert grades["10"]["L"] == "3.5"
+    grades = client.get(f"/api/classes/{CLASS}/students", headers=h).json()["grades"]
+    assert grades["9"][CT_ONLY_COL] == "2"
+    assert grades["10"][CT_ONLY_COL] == "3.5"
 
 
 def test_fremde_spalte_verboten(client):
-    h = _auth(client, "DIN", "k12h")  # DIN besitzt nur Spalte N in E2EG2
+    # Fachlehrer "x" besitzt Spalte L nicht (die gehört dem Klassenlehrer).
+    h = _auth(client, TEACHER, TEACHER_PW)
     r = client.post(
-        "/api/classes/E2EG2/grades",
+        f"/api/classes/{CLASS}/grades",
         headers=h,
-        json={"entries": [{"row": 9, "col": "L", "value": "2"}]},
+        json={"entries": [{"row": 9, "col": CT_ONLY_COL, "value": "2"}]},
     )
     assert r.status_code == 403
 
 
 def test_ungueltige_note(client):
-    h = _auth(client, "MEM", "test123")
+    h = _auth(client, CT, CT_PW)
     r = client.post(
-        "/api/classes/E2EG2/grades",
+        f"/api/classes/{CLASS}/grades",
         headers=h,
-        json={"entries": [{"row": 9, "col": "L", "value": "9"}]},
+        json={"entries": [{"row": 9, "col": CT_ONLY_COL, "value": "9"}]},
     )
     assert r.status_code == 400
+
+
+def test_leere_namen_werden_ausgeblendet(client):
+    """Standard: nur benannte Zeilen; mit all_columns sieht der KL alle Zeilen."""
+    h = _auth(client, CT, CT_PW)
+    default = client.get(f"/api/classes/{CLASS}/students", headers=h).json()
+    full = client.get(
+        f"/api/classes/{CLASS}/students?all_columns=1", headers=h
+    ).json()
+    assert all(s["name"].strip() for s in default["students"])
+    assert len(full["students"]) >= len(default["students"])

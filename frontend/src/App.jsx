@@ -312,7 +312,7 @@ function GradeGrid({ cls, onBack }) {
                 checked={allColumns}
                 onChange={(e) => setAllColumns(e.target.checked)}
               />
-              Alle Spalten anzeigen
+              Alle Spalten und Zeilen anzeigen
             </label>
             <button onClick={doExport} disabled={exporting}>
               {exporting ? "Exportiere…" : "Noten exportieren (.ods)"}

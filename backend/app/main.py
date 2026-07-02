@@ -204,7 +204,12 @@ def _editable_columns(sheet, kuerzel: str, include_empty=False):
     return [c for c in all_cols if c["owner"].casefold() == kuerzel.casefold()]
 
 
-def _students(sheet):
+def _students(sheet, include_empty_names=False):
+    """Schülerzeilen. Standard: nur Zeilen mit ausgefülltem Namen.
+
+    ``include_empty_names=True``: alle Zeilen des Bereichs (z. B. damit der
+    Klassenlehrer Namen ergänzen kann).
+    """
     out = []
     nr_c = col_to_index(settings.NR_COL)
     name_c = col_to_index(settings.NAME_COL)
@@ -213,7 +218,7 @@ def _students(sheet):
         nr = sheet.get_value(r, nr_c)
         name = sheet.get_text(r, name_c)
         vorname = sheet.get_text(r, vn_c)
-        if nr == "" and name == "" and vorname == "":
+        if not include_empty_names and name.strip() == "":
             continue
         out.append({"row": r + 1, "nr": nr, "name": name, "vorname": vorname})
     return out
@@ -360,17 +365,17 @@ def get_students(
     # sowie die Kopfzeilen (Kürzel/Gewicht/Kommentar).
     can_edit_meta = _classteacher(sheet).casefold() == teacher.casefold()
 
-    # "Alle Spalten" (auch ohne Kürzel) nur für den Klassenlehrer.
-    columns = _editable_columns(
-        sheet, teacher, include_empty=all_columns and can_edit_meta
-    )
+    # "Alles anzeigen" (leere Spalten UND Zeilen ohne Namen) nur für den
+    # Klassenlehrer.
+    show_all = all_columns and can_edit_meta
+    columns = _editable_columns(sheet, teacher, include_empty=show_all)
     if not columns:
         raise HTTPException(status_code=403, detail="Keine Bearbeitungsrechte")
 
     if can_edit_meta:
         columns = columns + _summary_columns(sheet)
 
-    students = _students(sheet)
+    students = _students(sheet, include_empty_names=show_all)
     # aktuelle Werte je Schüler/Spalte
     grades = {}
     for st in students:
