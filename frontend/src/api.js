@@ -42,9 +42,10 @@ export async function getStudents(cls, allColumns = false) {
   );
 }
 
-export async function exportClass(cls) {
+export async function exportClass(cls, allColumns = false) {
+  const q = allColumns ? "?all_columns=1" : "";
   const res = await fetch(
-    `${BASE}/classes/${encodeURIComponent(cls)}/export`,
+    `${BASE}/classes/${encodeURIComponent(cls)}/export${q}`,
     { headers: authHeader() }
   );
   if (!res.ok) {

@@ -124,7 +124,7 @@ function GradeGrid({ cls, onBack }) {
     setError("");
     setExporting(true);
     try {
-      const blob = await api.exportClass(cls);
+      const blob = await api.exportClass(cls, allColumns);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;

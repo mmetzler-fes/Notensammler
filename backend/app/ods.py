@@ -84,6 +84,30 @@ class Sheet:
             idx += rep
         return None
 
+    def _columns(self):
+        # Spaltendefinitionen können direkt oder in table-header-columns liegen.
+        return self._el.iter(q("table", "table-column"))
+
+    def set_column_hidden(self, col_idx: int, hidden: bool = True):
+        """Blendet eine Spalte aus (``table:visibility="collapse"``) bzw. wieder ein.
+
+        Die Spalte bleibt inklusive Inhalt erhalten – sie wird nur versteckt.
+        Zusammengefasste Wiederholungen werden bei Bedarf aufgesplittet.
+        """
+        idx = 0
+        for col in list(self._columns()):
+            rep = int(col.get(q("table", "number-columns-repeated"), "1"))
+            if idx <= col_idx < idx + rep:
+                target = col if rep == 1 else self._split(
+                    col, q("table", "number-columns-repeated"), col_idx - idx, rep
+                )
+                if hidden:
+                    target.set(q("table", "visibility"), "collapse")
+                elif q("table", "visibility") in target.attrib:
+                    del target.attrib[q("table", "visibility")]
+                return
+            idx += rep
+
     def _get_cell(self, row: etree._Element, col_idx: int, create: bool = False):
         idx = 0
         for cell in list(row):

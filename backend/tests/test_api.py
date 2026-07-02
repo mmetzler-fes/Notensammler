@@ -106,3 +106,66 @@ def test_leere_namen_werden_ausgeblendet(client):
     ).json()
     assert all(s["name"].strip() for s in default["students"])
     assert len(full["students"]) >= len(default["students"])
+
+
+def _collapsed_cols(ods_bytes: bytes, cls: str):
+    """Spaltenindizes, die in der exportierten ODS als versteckt markiert sind."""
+    import io
+    import zipfile
+
+    from app.ods import q
+    from lxml import etree
+
+    tree = etree.fromstring(
+        zipfile.ZipFile(io.BytesIO(ods_bytes)).read("content.xml")
+    )
+    tbl = next(
+        t for t in tree.iter(q("table", "table"))
+        if t.get(q("table", "name")) == cls
+    )
+    out, idx = [], 0
+    for col in tbl.iter(q("table", "table-column")):
+        rep = int(col.get(q("table", "number-columns-repeated"), "1"))
+        if col.get(q("table", "visibility")) == "collapse":
+            out += [idx + k for k in range(rep)]
+        idx += rep
+    return set(out)
+
+
+def test_export_blendet_leere_spalten_aus(client):
+    """Ohne all_columns werden die im Browser ausgeblendeten (leeren) Noten-
+    spalten auch in der ODS versteckt; mit all_columns bleibt alles sichtbar."""
+    from app import config, main
+    from app.ods import OdsDocument, col_to_index
+
+    h = _auth(client, CT, CT_PW)
+
+    # Spalte L eine leere Block-Spalte machen: Fach-Header setzen, Kürzel leeren.
+    l_idx = col_to_index(CT_ONLY_COL)
+    doc = OdsDocument(os.environ["ODS_PATH"])
+    sheet = doc.sheet(CLASS)
+    sheet.set_text(config.settings.SUBJECT_ROW - 1, l_idx, "Testfach")
+    sheet.set_text(config.settings.TEACHER_ROW - 1, l_idx, "")
+    doc.save()
+
+    # Nach dem Leeren ist L eine Block-Spalte ohne Kürzel -> muss verborgen werden.
+    sheet = OdsDocument(os.environ["ODS_PATH"]).sheet(CLASS)
+    visible = {c["col_idx"] for c in main._grade_columns(sheet, include_empty=False)}
+    expected = {
+        c["col_idx"]
+        for c in main._grade_columns(sheet, include_empty=True)
+        if c["col_idx"] not in visible
+    }
+    assert l_idx in expected  # Test ist nur aussagekräftig, wenn es etwas zu verbergen gibt
+
+    default = client.get(f"/api/classes/{CLASS}/export", headers=h)
+    assert default.status_code == 200
+    full = client.get(f"/api/classes/{CLASS}/export?all_columns=1", headers=h).content
+
+    assert _collapsed_cols(default.content, CLASS) == expected
+    assert _collapsed_cols(full, CLASS) == set()
+
+
+def test_export_nur_klassenlehrer(client):
+    h = _auth(client, TEACHER, TEACHER_PW)
+    assert client.get(f"/api/classes/{CLASS}/export", headers=h).status_code == 403

@@ -596,8 +596,17 @@ def _as_str(v) -> str:
 
 
 @app.get("/api/classes/{cls}/export")
-def export_class(cls: str, teacher: str = Depends(current_teacher)):
-    """Export der ausgewählten Klasse als eigenständige ODS (nur Klassenlehrer)."""
+def export_class(
+    cls: str,
+    all_columns: bool = False,
+    teacher: str = Depends(current_teacher),
+):
+    """Export der ausgewählten Klasse als eigenständige ODS (nur Klassenlehrer).
+
+    Ohne ``all_columns`` werden dieselben Spalten, die im Browser ausgeblendet
+    sind (leere Block-Spalten ohne Lehrerkürzel), auch in der ODS ausgeblendet.
+    Sie bleiben dabei erhalten – nur versteckt.
+    """
     doc = _open()
     if cls not in _class_sheets(doc):
         raise HTTPException(status_code=404, detail="Klasse nicht gefunden")
@@ -606,6 +615,11 @@ def export_class(cls: str, teacher: str = Depends(current_teacher)):
         raise HTTPException(
             status_code=403, detail="Nur der Klassenlehrer darf exportieren"
         )
+    if not all_columns:
+        visible_idx = {c["col_idx"] for c in _grade_columns(sheet, include_empty=False)}
+        for c in _grade_columns(sheet, include_empty=True):
+            if c["col_idx"] not in visible_idx:
+                sheet.set_column_hidden(c["col_idx"], True)
     # Alle anderen Blätter (inkl. Login_Daten) entfernen -> nur diese Klasse.
     doc.remove_sheets_except(cls)
     data = doc.to_bytes()
