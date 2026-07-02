@@ -1,0 +1,209 @@
+:root {
+  --bg: #f4f6f9;
+  --card: #ffffff;
+  --border: #d0d7de;
+  --accent: #1f6feb;
+  --accent-dark: #164a9e;
+  --error: #b31d28;
+  --ok: #1a7f37;
+  --text: #1f2328;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 16px;
+}
+
+.wrap {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.login { max-width: 360px; margin: 8vh auto 0; }
+.login h1 { margin-top: 0; }
+
+label {
+  display: block;
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
+
+input {
+  display: block;
+  width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.55rem 0.65rem;
+  font-size: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-weight: 400;
+}
+
+input:focus-visible,
+button:focus-visible {
+  outline: 3px solid #9ec5ff;
+  outline-offset: 1px;
+}
+
+button {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 0.6rem 1.1rem;
+  font-size: 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+}
+button:hover:not(:disabled) { background: var(--accent-dark); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+button.link {
+  background: none;
+  color: var(--accent);
+  padding: 0.3rem 0.4rem;
+  text-decoration: underline;
+}
+button.link:hover:not(:disabled) { background: none; color: var(--accent-dark); }
+
+.error { color: var(--error); font-weight: 600; }
+.ok { color: var(--ok); font-weight: 600; }
+.hint { color: var(--error); margin-left: 0.75rem; }
+
+.classlist { list-style: none; padding: 0; display: grid; gap: 0.6rem; }
+.classlist button {
+  width: 100%;
+  text-align: left;
+  background: #f6f8fa;
+  color: var(--text);
+  border: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.classlist button:hover { background: #eaf1ff; }
+.classlist span { font-weight: 400; color: #57606a; }
+
+.tip { margin: 0 0 0.75rem; font-size: 0.85rem; color: #57606a; }
+.tip kbd {
+  background: #eef1f5;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.05rem 0.35rem;
+  font-family: inherit;
+  font-size: 0.8rem;
+}
+
+.toolbar { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
+.ct-tools { margin-left: auto; display: flex; align-items: center; gap: 1rem; }
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 500;
+  margin: 0;
+  white-space: nowrap;
+}
+.switch input { width: auto; margin: 0; }
+.toolbar h2 { margin: 0; }
+
+.table-wrap { overflow: auto; max-height: 68vh; border: 1px solid var(--border); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border-bottom: 1px solid var(--border); padding: 0.35rem 0.5rem; text-align: left; }
+thead th {
+  position: sticky;
+  top: 0;
+  background: #f6f8fa;
+  z-index: 2;
+  vertical-align: bottom;
+}
+th .kuerzel {
+  display: block;
+  font-weight: 700;
+  font-size: 0.72rem;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+th .block { display: block; font-weight: 400; font-size: 0.72rem; color: #57606a; }
+th .fach { display: block; font-weight: 600; }
+th .sub { display: block; font-weight: 400; font-size: 0.72rem; color: #8a929b; }
+.sticky { position: sticky; left: 0; background: var(--card); z-index: 1; }
+thead .sticky { z-index: 3; background: #f6f8fa; }
+.name { min-width: 180px; }
+.name-edit { padding: 0.2rem 0.3rem; }
+.name-edit { display: flex; gap: 0.3rem; }
+input.name-input { width: 100%; margin: 0; padding: 0.25rem 0.35rem; font-size: 0.9rem; }
+
+input.grade {
+  width: 4.5rem;
+  margin: 0;
+  padding: 0.3rem 0.4rem;
+  text-align: center;
+}
+input.grade.bad { border-color: var(--error); background: #ffeef0; }
+
+/* Vom Klassenlehrer editierbare Kopfzeilen (Kürzel/Gewicht/Kommentar). */
+.meta-body td { background: #fbf7ec; }
+.meta-body .meta-label {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #7a5c00;
+  background: #f6efd8;
+}
+.meta-body .sticky { background: #f6efd8; }
+input.meta-input { background: #fffdf7; }
+/* Text-Kopfzeilen (Fach/Kürzel/Kommentar): volle Zellbreite, linksbündig. */
+input.meta-text {
+  width: 100%;
+  min-width: 5rem;
+  margin: 0;
+  padding: 0.3rem 0.4rem;
+  text-align: left;
+  background: #fffdf7;
+}
+
+/* Summenspalten: Schnitt (nur Anzeige) und Endnote (Klassenlehrer). */
+th.role-schnitt, th.role-endnote { background: #eef4ff; }
+td.readonly {
+  text-align: center;
+  color: #57606a;
+  font-variant-numeric: tabular-nums;
+  background: #f5f8ff;
+}
+input.grade.role-endnote { background: #eef4ff; font-weight: 600; }
+
+/* Durchschnitt-Fußzeile (Spaltenmittel, Zeile 41). */
+tfoot td {
+  position: sticky;
+  bottom: 0;
+  background: #eef1f5;
+  border-top: 2px solid var(--border);
+  font-weight: 600;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+tfoot .footer-label { left: 0; z-index: 1; text-align: left; color: #57606a; }
+
+.actions { margin-top: 1rem; display: flex; align-items: center; }

@@ -1,0 +1,28 @@
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    # Backend läuft unter der Host-UID/GID, damit die in ./data gespeicherten
+    # Dateien dem Host-Benutzer gehören (nicht root) und dort editierbar bleiben.
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    environment:
+      # In Produktion zwingend ein langes, zufälliges Secret setzen!
+      JWT_SECRET: "${JWT_SECRET:-bitte-in-produktion-aendern}"
+      ODS_PATH: "/data/Gesamtnotenliste.ods"
+      LOG_PATH: "/data/log_protokoll.txt"
+      # Hinter dem Frontend-Nginx liegen sie same-origin; "*" ist für lokale Tests ok.
+      CORS_ORIGINS: "${CORS_ORIGINS:-*}"
+    volumes:
+      # ODS-Datei und Protokoll bleiben auf dem Host erhalten (Persistenz).
+      - ./data:/data
+    expose:
+      - "8000"
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      # Extern: Port 8080. In Produktion hinter einen HTTPS-Reverse-Proxy hängen.
+      - "8080:80"
