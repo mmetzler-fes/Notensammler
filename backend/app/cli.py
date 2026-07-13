@@ -12,7 +12,7 @@ import sys
 
 from .config import settings
 from .db import Notenblatt, init_db, make_engine, make_session_factory
-from .etl import run_import
+from .etl import ImportBlocked, run_import
 from .export import export_alle, export_klasse
 
 
@@ -22,12 +22,31 @@ def _session():
     return make_session_factory(engine)()
 
 
-def cmd_import(_args) -> int:
+def _tabelle_verworfen(zeilen) -> None:
+    print(f"\n{'Zeile':>5}  {'Lehrer':<7}{'Klasse':<9}{'Gr.':<4}{'Fach':<7}{'Kennung':<9}Grund")
+    for z in zeilen:
+        gruppe = z.gruppe or "-"
+        print(
+            f"{z.zeile:>5}  {z.lehrer:<7}{z.klasse:<9}{gruppe:<4}{z.fach:<7}"
+            f"{z.kennung:<9}{z.grund}"
+        )
+
+
+def cmd_import(args) -> int:
     session = _session()
-    report = run_import(session)
+    try:
+        report = run_import(session, force=args.force)
+    except ImportBlocked as exc:
+        print(f"Abbruch: {exc}", file=sys.stderr)
+        print("Mit --force trotzdem neu importieren.", file=sys.stderr)
+        return 1
     print(f"Klassen:    {report.klassen}")
-    print(f"Deputat:    {report.deputat} übernommen, {report.verworfen} verworfen")
+    print(f"Deputat:    {report.deputat} übernommen, {len(report.verworfen)} verworfen")
     print(f"Notenblatt: {report.notenblatt} Spalten")
+    if report.verworfen and args.zeige_verworfene:
+        _tabelle_verworfen(report.verworfen)
+    elif report.verworfen:
+        print("            (mit --verworfen werden die verworfenen Zeilen aufgelistet)")
     for w in report.warnungen:
         print(f"  WARNUNG: {w}", file=sys.stderr)
     return 0
@@ -79,7 +98,18 @@ def main(argv=None) -> int:
     parser.add_argument("--db", help=f"DATABASE_URL (Standard: {settings.DATABASE_URL})")
     sub = parser.add_subparsers(dest="befehl", required=True)
 
-    sub.add_parser("import", help="Quelldateien in die Datenbank importieren")
+    p_import = sub.add_parser("import", help="Quelldateien in die Datenbank importieren")
+    p_import.add_argument(
+        "--verworfen",
+        dest="zeige_verworfene",
+        action="store_true",
+        help="verworfene Rohdaten-Zeilen mit Grund auflisten",
+    )
+    p_import.add_argument(
+        "--force",
+        action="store_true",
+        help="Neuimport auch dann, wenn bereits Noten eingegeben wurden (löscht sie)",
+    )
 
     p_export = sub.add_parser("export", help="Notenblätter als ODS exportieren")
     p_export.add_argument("--klasse", help="nur diese Klasse")

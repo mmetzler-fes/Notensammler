@@ -60,6 +60,57 @@ def test_import_verwirft_fremde_klassen_und_faecher(session):
         assert d.fach in settings.BFK_FAECHER
 
 
+def test_gruppe_wird_normalisiert():
+    from app.etl import parse_gruppe
+
+    assert parse_gruppe("A") == "A"
+    assert parse_gruppe("Gr. B") == "B"
+    assert parse_gruppe("Gr.a") == "A"
+    assert parse_gruppe("") == ""
+
+
+def test_verworfene_zeilen_werden_mit_grund_gemeldet(session):
+    from app.etl import import_deputat
+
+    _uebernommen, verworfen = import_deputat(session)
+    gruende = {(v.klasse, v.fach): v.grund for v in verworfen}
+
+    # Fremde Klasse, aber BFK-Fach.
+    assert "Klasse nicht in Vorlage_Klassen" in gruende[("E4BT2", "BT-L")]
+    # Bekanntes Fach-Kriterium greift unabhängig von der Klasse.
+    assert "BFK" in gruende[("TG12/2", "IT")]
+    assert all(v.zeile > 0 for v in verworfen)
+
+
+def test_erneuter_import_ist_wiederholbar(session):
+    from app.db import Klasse
+
+    vorher = spalten(session, "E3BT2", hj=1)
+    run_import(session)  # zweiter Lauf auf gefüllter Datenbank
+    assert session.query(Klasse).count() == 7
+    assert spalten(session, "E3BT2", hj=1) == vorher
+
+
+def test_import_schuetzt_vorhandene_noten(session):
+    from app.db import Noteneintrag, Schueler
+    from app.etl import ImportBlocked
+
+    schueler = Schueler(name="Muster", vorname="Max", klasse="E3BT2")
+    session.add(schueler)
+    session.flush()
+    spalte = session.query(Notenblatt).filter_by(klasse="E3BT2").first()
+    session.add(
+        Noteneintrag(schuelerid=schueler.schuelerid, notenblatt_id=spalte.eintrag,
+                     lehrer=spalte.lehrerkuerzel, note=2.0)
+    )
+    session.flush()
+
+    with pytest.raises(ImportBlocked):
+        run_import(session)
+
+    session.rollback()
+
+
 def test_blockunterricht_gewichtung(session):
     # MUS unterrichtet E2BT2/BT als BLO2 (6 Blockwochen je Halbjahr, 19 Schulwochen).
     assert spalten(session, "E2BT2", hj=1)[("BT", "", "MUS")] == pytest.approx(6 / 19)

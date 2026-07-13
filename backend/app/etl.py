@@ -12,7 +12,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from .config import settings
-from .db import Deputat, Klasse, Notenblatt
+from .db import Deputat, Klasse, Notenblatt, Noteneintrag
 from .ods import OdsDocument, col_to_index
 from .weights import Blockplan, KennungError, calculate_weight
 
@@ -20,17 +20,42 @@ HALBJAHRE = (1, 2)
 GRUPPEN_PAAR = ("A", "B")
 
 
+class ImportBlocked(RuntimeError):
+    """Neuimport würde bereits eingegebene Noten verwerfen."""
+
+
+@dataclass
+class VerworfeneZeile:
+    """Eine Rohdaten-Zeile, die nicht ins Deputat übernommen wurde."""
+
+    zeile: int  # Zeilennummer in Deputat.ods/Rohdaten (1-basiert, wie LibreOffice)
+    lehrer: str
+    klasse: str
+    gruppe: str
+    fach: str
+    kennung: str
+    grund: str
+
+
 @dataclass
 class ImportReport:
     klassen: int = 0
     deputat: int = 0
-    verworfen: int = 0  # Rohdaten-Zeilen mit unbekannter Klasse / unbekanntem Fach
     notenblatt: int = 0
+    verworfen: list[VerworfeneZeile] = None
     warnungen: list[str] = None
 
     def __post_init__(self):
         if self.warnungen is None:
             self.warnungen = []
+        if self.verworfen is None:
+            self.verworfen = []
+
+
+def parse_gruppe(wert) -> str:
+    """'A', 'Gr. A', 'Gr.B' -> 'A'; leer -> '' (ganze Klasse)."""
+    text = str(wert).strip()
+    return re.sub(r"^Gr\.?\s*", "", text, flags=re.IGNORECASE).strip().upper()
 
 
 def parse_stunden(wert) -> int:
@@ -49,7 +74,6 @@ def import_klassen(session, path: str | None = None) -> int:
     sheet = doc.sheet(settings.KLASSEN_SHEET)
     row = settings.KLASSEN_FIRST_ROW - 1
 
-    session.query(Klasse).delete()
     anzahl = 0
     while True:
         klasse = str(sheet.get_value(row, 0)).strip()
@@ -103,8 +127,11 @@ def load_blockplan(path: str | None = None) -> Blockplan:
     return plan
 
 
-def import_deputat(session, path: str | None = None) -> tuple[int, int]:
-    """Rohdaten importieren; Zeilen fremder Klassen/Fächer werden verworfen."""
+def import_deputat(session, path: str | None = None) -> tuple[int, list[VerworfeneZeile]]:
+    """Rohdaten importieren; Zeilen fremder Klassen/Fächer werden verworfen.
+
+    Liefert die Zahl der übernommenen Zeilen und die verworfenen Zeilen mit Grund.
+    """
     doc = OdsDocument(path or settings.DEPUTAT_ODS)
     sheet = doc.sheet(settings.ROHDATEN_SHEET)
     cols = {
@@ -118,8 +145,8 @@ def import_deputat(session, path: str | None = None) -> tuple[int, int]:
     bekannte = {k.klasse for k in session.query(Klasse).all()}
     faecher = set(settings.BFK_FAECHER)
 
-    session.query(Deputat).delete()
-    uebernommen = verworfen = 0
+    uebernommen = 0
+    verworfen: list[VerworfeneZeile] = []
     leer = 0
     row = settings.ROHDATEN_FIRST_ROW - 1
     while leer < 20:
@@ -130,18 +157,32 @@ def import_deputat(session, path: str | None = None) -> tuple[int, int]:
             row += 1
             continue
         leer = 0
+        gruppe = parse_gruppe(sheet.get_value(row, cols["gruppe"]))
         fach = str(sheet.get_value(row, cols["fach"])).strip()
-        if klasse not in bekannte or fach not in faecher:
-            verworfen += 1
+        kennung = str(sheet.get_value(row, cols["kennung"])).strip()
+
+        gruende = []
+        if klasse not in bekannte:
+            gruende.append("Klasse nicht in Vorlage_Klassen")
+        if fach not in faecher:
+            gruende.append(f"Fach zählt nicht zur BFK-Note ({', '.join(settings.BFK_FAECHER)})")
+        if gruende:
+            verworfen.append(
+                VerworfeneZeile(
+                    zeile=row + 1, lehrer=lehrer, klasse=klasse, gruppe=gruppe,
+                    fach=fach, kennung=kennung, grund=" + ".join(gruende),
+                )
+            )
             row += 1
             continue
+
         session.add(
             Deputat(
                 lehrerkuerzel=lehrer,
                 klasse=klasse,
-                gruppe=str(sheet.get_value(row, cols["gruppe"])).strip(),
+                gruppe=gruppe,
                 fach=fach,
-                deputat=str(sheet.get_value(row, cols["kennung"])).strip(),
+                deputat=kennung,
                 stunden=parse_stunden(sheet.get_value(row, cols["stunde"])),
             )
         )
@@ -157,7 +198,6 @@ def import_deputat(session, path: str | None = None) -> tuple[int, int]:
 def build_notenblatt(session, blockplan: Blockplan) -> tuple[int, list[str]]:
     """Erzeugt aus den Deputatszeilen die Notenblatt-Spalten je Klasse."""
     warnungen: list[str] = []
-    session.query(Notenblatt).delete()
 
     # (Klasse, Lehrer, Fach, Gruppe) -> Gewichte je HJ + Stunden.
     # Mehrfach eingetragener Unterricht (verschiedene Tage/Stunden) summiert sich.
@@ -275,7 +315,29 @@ def _build_sonderzeilen(session, spalten: dict[tuple, dict[int, float]]) -> int:
 
 # --- Gesamtlauf --------------------------------------------------------------
 
-def run_import(session) -> ImportReport:
+def reset_stammdaten(session, force: bool = False) -> None:
+    """Leert Notenblatt, Deputat und Klassen (in Abhängigkeitsreihenfolge).
+
+    Der Import baut die Stammdaten komplett neu auf. Bereits eingegebene Noten
+    hängen an den Notenblatt-Spalten und gingen dabei verloren – deshalb bricht
+    der Import ab, sobald Noten existieren (``force`` löscht sie bewusst mit).
+    """
+    noten = session.query(Noteneintrag).count()
+    if noten and not force:
+        raise ImportBlocked(
+            f"{noten} Noteneintrag/-einträge vorhanden. Ein Neuimport würde die "
+            "Notenblatt-Spalten und damit die Noten löschen."
+        )
+    session.query(Noteneintrag).delete()
+    session.query(Notenblatt).delete()
+    session.query(Deputat).delete()
+    session.query(Klasse).delete()
+    session.flush()
+
+
+def run_import(session, force: bool = False) -> ImportReport:
+    reset_stammdaten(session, force)
+
     report = ImportReport()
     report.klassen = import_klassen(session)
     report.deputat, report.verworfen = import_deputat(session)
