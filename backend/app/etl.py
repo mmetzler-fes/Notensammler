@@ -59,12 +59,12 @@ def parse_gruppe(wert) -> str:
 
 
 def parse_stunden(wert) -> int:
-    """'1-4' -> 4, '7-10' -> 4, '5' -> 1."""
+    """Anzahl Unterrichtsstunden aus der Spalte "Stunde": '7-10' -> 4, '5' -> 1."""
     text = str(wert).strip()
     m = re.match(r"^(\d+)\s*-\s*(\d+)$", text)
     if m:
         return max(1, int(m.group(2)) - int(m.group(1)) + 1)
-    return 1 if text.isdigit() or not text else 1
+    return 1
 
 
 # --- 1. Klassen --------------------------------------------------------------
@@ -200,7 +200,9 @@ def build_notenblatt(session, blockplan: Blockplan) -> tuple[int, list[str]]:
     warnungen: list[str] = []
 
     # (Klasse, Lehrer, Fach, Gruppe) -> Gewichte je HJ + Stunden.
-    # Mehrfach eingetragener Unterricht (verschiedene Tage/Stunden) summiert sich.
+    # Das Gewicht einer Deputatszeile ist der Rhythmus-Anteil mal der Anzahl der
+    # Unterrichtsstunden (Spalte "Stunde", z. B. "7-10" = 4 Stunden). Mehrfach
+    # eingetragener Unterricht (verschiedene Tage) summiert sich auf.
     agg: dict[tuple, dict] = defaultdict(lambda: {"w": {1: 0.0, 2: 0.0}, "stunden": 0})
     for d in session.query(Deputat).all():
         try:
@@ -209,8 +211,8 @@ def build_notenblatt(session, blockplan: Blockplan) -> tuple[int, list[str]]:
             warnungen.append(f"{d.klasse}/{d.lehrerkuerzel}/{d.fach}: {exc}")
             continue
         eintrag = agg[(d.klasse, d.lehrerkuerzel, d.fach, d.gruppe)]
-        eintrag["w"][1] += w1
-        eintrag["w"][2] += w2
+        eintrag["w"][1] += w1 * d.stunden
+        eintrag["w"][2] += w2 * d.stunden
         eintrag["stunden"] += d.stunden
 
     spalten = _merge_gruppen(agg)

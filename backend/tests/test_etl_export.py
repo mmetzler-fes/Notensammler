@@ -113,35 +113,55 @@ def test_import_schuetzt_vorhandene_noten(session):
 
 def test_blockunterricht_gewichtung(session):
     # MUS unterrichtet E2BT2/BT als BLO2 (6 Blockwochen je Halbjahr, 19 Schulwochen).
-    assert spalten(session, "E2BT2", hj=1)[("BT", "", "MUS")] == pytest.approx(6 / 19)
-    assert spalten(session, "E2BT2", hj=2)[("BT", "", "MUS")] == pytest.approx(6 / 19)
+    assert spalten(session, "E2BT2", hj=1)[("BT", "", "MUS")] == pytest.approx(2 * 6 / 19)
+    assert spalten(session, "E2BT2", hj=2)[("BT", "", "MUS")] == pytest.approx(2 * 6 / 19)
 
     # MEM unterrichtet E3BT2/BT-L Gr.B als BLO3 -> im 2. HJ mehr Blockwochen.
-    assert spalten(session, "E3BT2", hj=1)[("BT-L", "B", "MEM")] == pytest.approx(BLO3_HJ1)
-    assert spalten(session, "E3BT2", hj=2)[("BT-L", "B", "MEM")] == pytest.approx(BLO3_HJ2)
+    assert spalten(session, "E3BT2", hj=1)[("BT-L", "B", "MEM")] == pytest.approx(4 * BLO3_HJ1)
+    assert spalten(session, "E3BT2", hj=2)[("BT-L", "B", "MEM")] == pytest.approx(4 * BLO3_HJ2)
 
 
 def test_mehrfacher_unterricht_summiert_gewichte(session):
     # MUS unterrichtet E3BT2/BT in drei Stundenplan-Zeilen mit BLO3.
-    assert spalten(session, "E3BT2", hj=1)[("BT", "", "MUS")] == pytest.approx(3 * BLO3_HJ1)
-    assert spalten(session, "E3BT2", hj=2)[("BT", "", "MUS")] == pytest.approx(3 * BLO3_HJ2)
+    assert spalten(session, "E3BT2", hj=1)[("BT", "", "MUS")] == pytest.approx(3 * 2 * BLO3_HJ1)
+    assert spalten(session, "E3BT2", hj=2)[("BT", "", "MUS")] == pytest.approx(3 * 2 * BLO3_HJ2)
 
 
 def test_ganzjahres_kennung_ohne_praefix(session):
     # MEM unterrichtet E2EG2/BT mit Kennung "21" -> jede 2. Woche, ganzes Jahr.
-    assert spalten(session, "E2EG2", hj=1)[("BT", "", "MEM")] == pytest.approx(0.5)
-    assert spalten(session, "E2EG2", hj=2)[("BT", "", "MEM")] == pytest.approx(0.5)
+    assert spalten(session, "E2EG2", hj=1)[("BT", "", "MEM")] == pytest.approx(4 * 0.5)
+    assert spalten(session, "E2EG2", hj=2)[("BT", "", "MEM")] == pytest.approx(4 * 0.5)
+
+
+def test_stundenzahl_geht_ins_gewicht_ein(session):
+    from app.db import Deputat
+    from app.etl import parse_stunden
+
+    assert parse_stunden("7-10") == 4  # 7. bis 10. Stunde
+    assert parse_stunden("1-4") == 4
+    assert parse_stunden("5") == 1
+    assert parse_stunden("") == 1
+
+    # MEM unterrichtet E2EG2/BT in der 7.-10. Stunde (4h) mit Kennung "21"
+    # -> Rhythmus 0.5 mal 4 Stunden = 2.0 je Halbjahr.
+    zeile = (
+        session.query(Deputat)
+        .filter_by(klasse="E2EG2", lehrerkuerzel="MEM", fach="BT")
+        .one()
+    )
+    assert zeile.stunden == 4
+    assert spalten(session, "E2EG2", hj=1)[("BT", "", "MEM")] == pytest.approx(2.0)
 
 
 def test_beide_gruppen_gleich_stark_ergeben_eine_spalte(session):
     # MEM unterrichtet E1ME2/BT-L in Gr.A und Gr.B (je "B22", gleiche Stundenzahl)
     # -> eine Spalte ohne Gruppenkennung, nur im 2. Halbjahr.
     hj2 = spalten(session, "E1ME2", hj=2)
-    assert hj2[("BT-L", "", "MEM")] == pytest.approx(0.5)
+    assert hj2[("BT-L", "", "MEM")] == pytest.approx(2 * 0.5)
     assert ("BT-L", "A", "MEM") not in hj2
     assert ("BT-L", "B", "MEM") not in hj2
     # MUS unterrichtet dort nur Gr.B -> Gruppenkennung bleibt erhalten.
-    assert hj2[("BT-L", "B", "MUS")] == pytest.approx(BLO1_HJ2)
+    assert hj2[("BT-L", "B", "MUS")] == pytest.approx(2 * BLO1_HJ2)
 
 
 def test_praefix_b_erscheint_nicht_im_ersten_halbjahr(session):
@@ -189,8 +209,8 @@ def test_export_1hj_enthaelt_nur_erstes_halbjahr(session, tmp_path):
     assert sheet.get_value(2, col_to_index("C")) == "MUS"  # Klassenlehrer
 
     werte = {(f, l): g for f, l, g in bfk.values()}
-    assert werte[("BT", "MUS")] == pytest.approx(3 * BLO3_HJ1)
-    assert werte[("BT-L Gr.B", "MEM")] == pytest.approx(BLO3_HJ1)
+    assert werte[("BT", "MUS")] == pytest.approx(3 * 2 * BLO3_HJ1)
+    assert werte[("BT-L Gr.B", "MEM")] == pytest.approx(4 * BLO3_HJ1)
 
 
 def test_export_jahr_addiert_beide_halbjahre(session, tmp_path):
@@ -198,8 +218,8 @@ def test_export_jahr_addiert_beide_halbjahre(session, tmp_path):
     _sheet, bfk = _lies(pfad, "Jahr")
 
     werte = {(f, l): g for f, l, g in bfk.values()}
-    assert werte[("BT", "MUS")] == pytest.approx(3 * (BLO3_HJ1 + BLO3_HJ2))
-    assert werte[("BT-L Gr.B", "MEM")] == pytest.approx(BLO3_HJ1 + BLO3_HJ2)
+    assert werte[("BT", "MUS")] == pytest.approx(3 * 2 * (BLO3_HJ1 + BLO3_HJ2))
+    assert werte[("BT-L Gr.B", "MEM")] == pytest.approx(4 * (BLO3_HJ1 + BLO3_HJ2))
 
 
 def test_export_jahr_gibt_reinen_zweit_halbjahres_lehrer_eigene_spalte(session, tmp_path):
@@ -208,9 +228,9 @@ def test_export_jahr_gibt_reinen_zweit_halbjahres_lehrer_eigene_spalte(session, 
 
     werte = {(f, l): g for f, l, g in bfk.values()}
     # MEM unterrichtet nur im 2. HJ -> eigene Spalte mit seiner Gewichtung.
-    assert werte[("BT-L", "MEM")] == pytest.approx(0.5)
+    assert werte[("BT-L", "MEM")] == pytest.approx(2 * 0.5)
     # MUS unterrichtet Gr.B in beiden Halbjahren -> addiert.
-    assert werte[("BT-L Gr.B", "MUS")] == pytest.approx(BLO1_HJ1 + BLO1_HJ2)
+    assert werte[("BT-L Gr.B", "MUS")] == pytest.approx(2 * (BLO1_HJ1 + BLO1_HJ2))
 
 
 def test_export_spalten_werden_von_links_gefuellt(session, tmp_path):
