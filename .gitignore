@@ -13,3 +13,6 @@ data/
 
 # LibreOffice-Sperrdateien
 .~lock.*#
+
+# Lokale venv
+.venv/

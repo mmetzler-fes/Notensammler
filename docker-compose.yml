@@ -10,6 +10,13 @@ services:
       JWT_SECRET: "${JWT_SECRET:-bitte-in-produktion-aendern}"
       ODS_PATH: "/data/Gesamtnotenliste.ods"
       LOG_PATH: "/data/log_protokoll.txt"
+      # SQLite-Datei im gemounteten Volume -> übersteht Neubau des Containers.
+      # Für PostgreSQL genügt es, hier die URL zu tauschen.
+      DATABASE_URL: "${DATABASE_URL:-sqlite:////data/notensammler.db}"
+      KLASSEN_ODS: "/data/Vorlage_Klassen.ods"
+      DEPUTAT_ODS: "/data/Deputat.ods"
+      VORLAGE_ODS: "/data/Vorlage.ods"
+      EXPORT_DIR: "/data/export"
       # Hinter dem Frontend-Nginx liegen sie same-origin; "*" ist für lokale Tests ok.
       CORS_ORIGINS: "${CORS_ORIGINS:-*}"
     volumes:
