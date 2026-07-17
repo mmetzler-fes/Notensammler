@@ -205,7 +205,7 @@ def test_export_1hj_enthaelt_nur_erstes_halbjahr(session, tmp_path):
     assert pfad.endswith("E3BT2_1HJ.ods")
 
     sheet, bfk = _lies(pfad, "1HJ")
-    assert sheet.get_value(0, col_to_index("D")) == "E3BT2"
+    assert sheet.get_value(0, col_to_index("C")) == "E3BT2"
     assert sheet.get_value(2, col_to_index("C")) == "MUS"  # Klassenlehrer
 
     werte = {(f, l): g for f, l, g in bfk.values()}

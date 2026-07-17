@@ -66,7 +66,7 @@ class Settings:
     # --- Aufbau der Vorlage (Vorlage.ods) ---------------------------------
     VORLAGE_SHEET_HJ1: str = os.getenv("VORLAGE_SHEET_HJ1", "1HJ")
     VORLAGE_SHEET_JAHR: str = os.getenv("VORLAGE_SHEET_JAHR", "Jahr")
-    KLASSE_CELL: str = os.getenv("KLASSE_CELL", "D1")
+    KLASSE_CELL: str = os.getenv("KLASSE_CELL", "C1")
 
     # Notenspalten-Blöcke der Vorlage: "Kategorie:ErsteSpalte:LetzteSpalte".
     # Die Fach-Zeile ist außerhalb von BFK bereits in der Vorlage beschriftet
